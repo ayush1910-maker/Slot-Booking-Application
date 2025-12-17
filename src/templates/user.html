@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Slot Booking</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
+
+  <h1 class="text-3xl font-bold mb-6 text-center">Slot Booking System</h1>
+
+  <!-- Registration Form -->
+  <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md mb-6">
+    <h2 class="text-xl font-semibold mb-4">Register User</h2>
+    <form id="registerForm" class="space-y-4">
+      <input type="text" name="name" placeholder="Name" required
+        class="w-full p-2 border border-gray-300 rounded" />
+      <input type="email" name="email" placeholder="Email" required
+        class="w-full p-2 border border-gray-300 rounded" />
+      <select name="gender" class="w-full p-2 border border-gray-300 rounded">
+        <option value="">Select Gender (optional)</option>
+        <option value="Male">Male</option>
+        <option value="Female">Female</option>
+        <option value="Other">Other</option>
+      </select>
+      <input type="date" name="dateofbirth" required
+        class="w-full p-2 border border-gray-300 rounded" />
+      <button type="submit"
+        class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
+        Register
+      </button>
+    </form>
+    <p id="registerMsg" class="mt-2 text-sm"></p>
+  </div>
+
+  <!-- Available Slots -->
+  <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md mb-6">
+    <h2 class="text-xl font-semibold mb-4">Available Slots</h2>
+    <div class="flex mb-4">
+      <input type="date" id="slotDate" class="flex-1 p-2 border border-gray-300 rounded"/>
+      <button id="fetchSlots"
+        class="ml-2 bg-green-600 text-white p-2 rounded hover:bg-green-700">
+        Fetch
+      </button>
+    </div>
+    <ul id="slotsList" class="space-y-2"></ul>
+    <p id="slotsMsg" class="mt-2 text-sm"></p>
+  </div>
+
+  <!-- Book Slot -->
+  <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+    <h2 class="text-xl font-semibold mb-4">Book a Slot</h2>
+    <form id="bookForm" class="space-y-4">
+      <input type="number" name="slot_id" placeholder="Slot ID" required
+        class="w-full p-2 border border-gray-300 rounded" />
+      <!-- hidden user_id (auto-filled after registration) -->
+      <input type="hidden" name="user_id" id="user_id" />
+      <button type="submit"
+        class="w-full bg-purple-600 text-white p-2 rounded hover:bg-purple-700">
+        Book Slot
+      </button>
+    </form>
+    <p id="bookMsg" class="mt-2 text-sm"></p>
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:8080/user";
+    let currentUserId = null;
+
+    const registerForm = document.getElementById("registerForm");
+    const registerMsg = document.getElementById("registerMsg");
+    const slotsList = document.getElementById("slotsList");
+    const slotsMsg = document.getElementById("slotsMsg");
+    const fetchSlotsBtn = document.getElementById("fetchSlots");
+    const bookForm = document.getElementById("bookForm");
+    const bookMsg = document.getElementById("bookMsg");
+    const hiddenUserId = document.getElementById("user_id");
+
+    // Helper: schedule browser notification 10 minutes before slot
+    function scheduleBrowserNotification(slot) {
+      const slotTime = new Date(`${slot.date}T${slot.start_time}`);
+      const notifyTime = new Date(slotTime.getTime() - 10 * 60 * 1000);
+      const delay = notifyTime.getTime() - new Date().getTime();
+
+      if (delay > 0) {
+        setTimeout(() => {
+          alert(`🔔 Reminder: Your slot (ID: ${slot.id}) is scheduled at ${slot.start_time}`);
+        }, delay);
+      }
+    }
+
+    // User registration
+    registerForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formData = new FormData(registerForm);
+      const data = Object.fromEntries(formData.entries());
+
+      try {
+        const res = await fetch(`${API_BASE}/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        const result = await res.json();
+        if (res.ok && result?.data?.id) {
+          currentUserId = result.data.id;
+          hiddenUserId.value = currentUserId;
+          registerMsg.textContent = `✅ Registered successfully! User ID: ${currentUserId}`;
+          registerMsg.className = "text-green-600 mt-2";
+        } else {
+          registerMsg.textContent = result.message || "Registration failed";
+          registerMsg.className = "text-red-600 mt-2";
+        }
+      } catch (err) {
+        registerMsg.textContent = err.message;
+        registerMsg.className = "text-red-600 mt-2";
+      }
+    });
+
+    // Fetch available slots
+    fetchSlotsBtn.addEventListener("click", async () => {
+      const date = document.getElementById("slotDate").value;
+      if (!date) {
+        slotsMsg.textContent = "Please select a date";
+        slotsMsg.className = "text-red-600 mt-2";
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/getavailableslots?date=${date}`);
+        const result = await res.json();
+
+        slotsList.innerHTML = "";
+        slotsMsg.textContent = "";
+
+        if (res.ok && result.status && result.data?.length) {
+          result.data.forEach((slot) => {
+            const li = document.createElement("li");
+            li.textContent = `ID: ${slot.id}, ${slot.start_time} - ${slot.end_time}`;
+            li.classList.add("p-2", "border", "border-gray-300", "rounded");
+            slotsList.appendChild(li);
+          });
+        } else {
+          slotsMsg.textContent = result.message || "No slots available";
+          slotsMsg.className = "text-red-600 mt-2";
+        }
+      } catch (err) {
+        slotsMsg.textContent = err.message;
+        slotsMsg.className = "text-red-600 mt-2";
+      }
+    });
+
+    // Book a slot
+    bookForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formData = new FormData(bookForm);
+      const data = Object.fromEntries(formData.entries());
+
+      if (!data.user_id) {
+        bookMsg.textContent = "Please register first to book a slot";
+        bookMsg.className = "text-red-600 mt-2";
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/bookslot`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        const result = await res.json();
+        if (res.ok && result.status) {
+          bookMsg.textContent = "✅ " + (result.message || "Slot booked successfully");
+          bookMsg.className = "text-green-600 mt-2";
+
+          // Schedule client-side notification
+          scheduleBrowserNotification(result.data);
+        } else {
+          bookMsg.textContent = result.message || "Booking failed";
+          bookMsg.className = "text-red-600 mt-2";
+        }
+      } catch (err) {
+        bookMsg.textContent = err.message;
+        bookMsg.className = "text-red-600 mt-2";
+      }
+    });
+  </script>
+</body>
+</html>
